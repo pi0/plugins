@@ -70,9 +70,9 @@ export default function transformCommonjs(
     module: false,
     exports: false,
     global: false,
-    require: false,
-    commonjsHelpers: false
+    require: false
   };
+  let usesCommonjsHelpers = false;
   const virtualDynamicRequirePath =
     isDynamicRequireModulesEnabled && getVirtualPathForDynamicRequirePath(dirname(id), commonDir);
   let scope = attachScopes(ast, 'scope');
@@ -213,7 +213,7 @@ export default function transformCommonjs(
                 storeName: true
               }
             );
-            uses.commonjsHelpers = true;
+            usesCommonjsHelpers = true;
             return;
           }
 
@@ -264,7 +264,7 @@ export default function transformCommonjs(
                       dirname(id) === '.' ? null /* default behavior */ : virtualDynamicRequirePath
                     )})`
                   );
-                  uses.commonjsHelpers = true;
+                  usesCommonjsHelpers = true;
                 }
                 return;
               }
@@ -321,7 +321,7 @@ export default function transformCommonjs(
                     magicString.overwrite(node.start, node.end, `${HELPERS_NAME}.commonjsRequire`, {
                       storeName: true
                     });
-                    uses.commonjsHelpers = true;
+                    usesCommonjsHelpers = true;
                   }
                 }
 
@@ -344,7 +344,7 @@ export default function transformCommonjs(
                 });
               }
 
-              uses.commonjsHelpers = true;
+              usesCommonjsHelpers = true;
               return;
             case 'module':
             case 'exports':
@@ -357,7 +357,7 @@ export default function transformCommonjs(
                 magicString.overwrite(node.start, node.end, `${HELPERS_NAME}.commonjsGlobal`, {
                   storeName: true
                 });
-                uses.commonjsHelpers = true;
+                usesCommonjsHelpers = true;
               }
               return;
             case 'define':
@@ -375,7 +375,7 @@ export default function transformCommonjs(
             magicString.overwrite(node.start, node.end, `${HELPERS_NAME}.commonjsRequire`, {
               storeName: true
             });
-            uses.commonjsHelpers = true;
+            usesCommonjsHelpers = true;
             skippedNodes.add(node.object);
             skippedNodes.add(node.property);
           }
@@ -394,7 +394,7 @@ export default function transformCommonjs(
               magicString.overwrite(node.start, node.end, `${HELPERS_NAME}.commonjsGlobal`, {
                 storeName: true
               });
-              uses.commonjsHelpers = true;
+              usesCommonjsHelpers = true;
             }
           }
           return;
@@ -438,7 +438,10 @@ export default function transformCommonjs(
 
   // We cannot wrap ES/mixed modules
   shouldWrap = shouldWrap && !disableWrap && !isEsModule;
-  uses.commonjsHelpers = uses.commonjsHelpers || shouldWrap;
+  const detectWrappedDefault =
+    shouldWrap &&
+    (topLevelDefineCompiledEsmExpressions.length > 0 || code.indexOf('__esModule') >= 0);
+  usesCommonjsHelpers = usesCommonjsHelpers || detectWrappedDefault;
 
   if (
     !(
@@ -447,7 +450,7 @@ export default function transformCommonjs(
       uses.module ||
       uses.exports ||
       uses.require ||
-      uses.commonjsHelpers ||
+      usesCommonjsHelpers ||
       hasRemovedRequire
     ) &&
     (ignoreGlobal || !uses.global)
@@ -478,7 +481,7 @@ export default function transformCommonjs(
     topLevelDeclarations,
     topLevelRequireDeclarators,
     reassignedNames,
-    uses.commonjsHelpers && HELPERS_NAME,
+    usesCommonjsHelpers && HELPERS_NAME,
     dynamicRegisterSources,
     moduleName,
     exportsName,
@@ -498,9 +501,9 @@ export default function transformCommonjs(
         topLevelDefineCompiledEsmExpressions,
         (name) => deconflict(scope, globals, name),
         code,
-        uses,
         HELPERS_NAME,
-        exportMode
+        exportMode,
+        detectWrappedDefault
       );
 
   if (shouldWrap) {
